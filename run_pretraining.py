@@ -35,7 +35,11 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     "input_file", None,
-    "Input TF example files (can be a glob or comma separated).")
+    "Input TF example files for training (can be a glob or comma separated).")
+
+flags.DEFINE_string(
+    "test_input_file", None,
+    "Input TF example files for test (can be a glob or comma separated).")
 
 flags.DEFINE_string(
     "output_dir", None,
@@ -146,6 +150,10 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
          bert_config, model.get_pooled_output(), next_sentence_labels)
 
     total_loss = masked_lm_loss + next_sentence_loss
+    
+    # hack to print out loss per training step
+    with tf.control_dependencies([total_loss]):
+      total_loss = tf.Print(total_loss, [total_loss, masked_lm_loss, next_sentence_loss], message="loss total/lm/next sent: ")
 
     tvars = tf.trainable_variables()
 
@@ -421,6 +429,15 @@ def main(_):
   for input_file in input_files:
     tf.logging.info("  %s" % input_file)
 
+  # load input file for test
+  test_input_files = []
+  for input_pattern in FLAGS.test_input_file.split(","):
+    test_input_files.extend(tf.gfile.Glob(input_pattern))
+
+  tf.logging.info("*** Test Input Files ***")
+  for test_input_file in test_input_files:
+    tf.logging.info("  %s" % test_input_file)
+
   tpu_cluster_resolver = None
   if FLAGS.use_tpu and FLAGS.tpu_name:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -469,6 +486,7 @@ def main(_):
     tf.logging.info("***** Running evaluation *****")
     tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
 
+    # note the evaluation here is based on the training set
     eval_input_fn = input_fn_builder(
         input_files=input_files,
         max_seq_length=FLAGS.max_seq_length,
@@ -485,6 +503,22 @@ def main(_):
         tf.logging.info("  %s = %s", key, str(result[key]))
         writer.write("%s = %s\n" % (key, str(result[key])))
 
+    # we use a separate test set for validation purpose
+    test_input_fn = input_fn_builder(
+        input_files=test_input_files,
+        max_seq_length=FLAGS.max_seq_length,
+        max_predictions_per_seq=FLAGS.max_predictions_per_seq,
+        is_training=False)
+
+    test_result = estimator.evaluate(
+        input_fn=test_input_fn, steps=FLAGS.max_eval_steps)    
+
+    output_test_file = os.path.join(FLAGS.output_dir, "test_results.txt")
+    with tf.gfile.GFile(output_test_file, "w") as writer:
+      tf.logging.info("***** Test results *****")
+      for key in sorted(test_result.keys()):
+        tf.logging.info("  %s = %s", key, str(test_result[key]))
+        writer.write("%s = %s\n" % (key, str(test_result[key])))
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("input_file")
