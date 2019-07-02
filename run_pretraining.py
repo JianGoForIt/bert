@@ -81,6 +81,8 @@ flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
 
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 
+flags.DEFINE_integer("rand_seed", 1, "global random seed for tensorflow")
+
 tf.flags.DEFINE_string(
     "tpu_name", None,
     "The Cloud TPU to use for training. This should be either the name "
@@ -176,6 +178,14 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
     if mode == tf.estimator.ModeKeys.TRAIN:
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+
+      # set the model value to a int value
+      with tf.control_dependencies([train_op]):
+        assign_op_list = []
+        for var in tvars:
+          assign_op_list.append(tf.assign(var, tf.ones_like(var)))          
+        assign_op = tf.group(*assign_op_list)
+      train_op = tf.group(*[train_op, assign_op])
 
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
@@ -404,6 +414,9 @@ def _decode_record(record, name_to_features):
 
 
 def main(_):
+  # set_tensorflow_random_seed(FLAGS.rand_seed)
+  # print("tensorflow random seed set to ", FLAGS.rand_seed)
+
   tf.logging.set_verbosity(tf.logging.INFO)
 
   if not FLAGS.do_train and not FLAGS.do_eval:
@@ -464,6 +477,7 @@ def main(_):
         max_predictions_per_seq=FLAGS.max_predictions_per_seq,
         is_training=True)
     estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps)
+
 
   if FLAGS.do_eval:
     tf.logging.info("***** Running evaluation *****")

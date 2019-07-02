@@ -860,26 +860,58 @@ def transformer_model(input_tensor,
               hidden_size,
               kernel_initializer=create_initializer(initializer_range))
           attention_output = dropout(attention_output, hidden_dropout_prob)
-          attention_output = layer_norm(attention_output + layer_input)
+          
+          with tf.control_dependencies([attention_output]):
+            attention_print = tf.print("attention output ", attention_output, layer_input, tf.shape(attention_output))
+
+          with tf.control_dependencies([attention_print]):
+            attention_output = layer_norm(attention_output + layer_input)
+
+            test_var_list = []
+            for tvar in tf.trainable_variables():
+              ln_beta_name = 'bert/encoder/layer_{}/attention/output/LayerNorm/beta'.format(layer_idx)
+              ln_gamma_name = 'bert/encoder/layer_{}/attention/output/LayerNorm/gamma'.format(layer_idx)
+              if ln_beta_name in tvar.name:
+                t1 = tvar
+              if ln_gamma_name in tvar.name:
+                t2 = tvar
+
+            with tf.control_dependencies([attention_output, layer_input]):
+              attention_print2 = tf.print("attention output 2 ", attention_output, layer_input,
+                t1, t2
+                # tf.get_variable('bert/encoder/layer_0/attention/output/LayerNorm/beta'),
+                # tf.get_variable('bert/encoder/layer_0/attention/output/LayerNorm/gamma'),
+              )
 
       # The activation is only applied to the "intermediate" hidden layer.
-      with tf.variable_scope("intermediate"):
-        intermediate_output = tf.layers.dense(
-            attention_output,
-            intermediate_size,
-            activation=intermediate_act_fn,
-            kernel_initializer=create_initializer(initializer_range))
+      with tf.control_dependencies([attention_print2]):
+        with tf.variable_scope("intermediate"):
+          intermediate_output = tf.layers.dense(
+              attention_output,
+              intermediate_size,
+              activation=intermediate_act_fn,
+              kernel_initializer=create_initializer(initializer_range))
+
+          with tf.control_dependencies([intermediate_output]):
+            intermediate_print = tf.print("intermediate output ", intermediate_output)
 
       # Down-project back to `hidden_size` then add the residual.
-      with tf.variable_scope("output"):
-        layer_output = tf.layers.dense(
-            intermediate_output,
-            hidden_size,
-            kernel_initializer=create_initializer(initializer_range))
-        layer_output = dropout(layer_output, hidden_dropout_prob)
-        layer_output = layer_norm(layer_output + attention_output)
-        prev_output = layer_output
-        all_layer_outputs.append(layer_output)
+      with tf.control_dependencies([intermediate_print]):
+        with tf.variable_scope("output"):
+          layer_output = tf.layers.dense(
+              intermediate_output,
+              hidden_size,
+              kernel_initializer=create_initializer(initializer_range))
+          layer_output = dropout(layer_output, hidden_dropout_prob)
+          layer_output = layer_norm(layer_output + attention_output)
+          
+          layer_print = tf.print("layer output ", layer_output)
+          with tf.control_dependencies([layer_print]):
+            layer_output = tf.identity(layer_output)
+
+
+          prev_output = layer_output
+          all_layer_outputs.append(layer_output)
 
   if do_return_all_layers:
     final_outputs = []

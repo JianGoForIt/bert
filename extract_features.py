@@ -23,6 +23,8 @@ import collections
 import json
 import re
 
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import modeling
 import tokenization
 import tensorflow as tf
@@ -169,10 +171,20 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
       raise ValueError("Only PREDICT modes are supported: %s" % (mode))
 
     tvars = tf.trainable_variables()
+
+    # debug
+    for tvar in tvars:
+      print(tvar.name)
+
     scaffold_fn = None
     (assignment_map,
      initialized_variable_names) = modeling.get_assignment_map_from_checkpoint(
          tvars, init_checkpoint)
+
+    # debug
+    # print("map ", assignment_map)
+
+
     if use_tpu:
 
       def tpu_scaffold():
