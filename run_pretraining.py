@@ -22,6 +22,8 @@ import os
 import modeling
 import optimization
 import tensorflow as tf
+import numpy as np
+import random
 
 flags = tf.flags
 
@@ -81,6 +83,8 @@ flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
 
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 
+flags.DEFINE_integer("rand_seed", 1, "global random seed for tensorflow")
+
 tf.flags.DEFINE_string(
     "tpu_name", None,
     "The Cloud TPU to use for training. This should be either the name "
@@ -105,6 +109,10 @@ flags.DEFINE_integer(
     "num_tpu_cores", 8,
     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 
+def set_tensorflow_random_seed(rand_seed):
+    random.seed(rand_seed)
+    np.random.seed(rand_seed)
+    tf.set_random_seed(rand_seed)
 
 def model_fn_builder(bert_config, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
@@ -405,6 +413,8 @@ def _decode_record(record, name_to_features):
 
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
+  set_tensorflow_random_seed(FLAGS.rand_seed)
+  tf.logging.info("tensorflow random seed set to %d", FLAGS.rand_seed)
 
   if not FLAGS.do_train and not FLAGS.do_eval:
     raise ValueError("At least one of `do_train` or `do_eval` must be True.")
